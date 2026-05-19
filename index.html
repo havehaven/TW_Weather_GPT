@@ -200,8 +200,8 @@
 (() => {
   const API_KEY = "CWA-21A787E7-10AF-4D8D-9BE1-9C27B24D20A2";
   const DATASET_ID = "F-D0047-093";
-  const CACHE_KEY = "cwa_town_forecast_cache_v1";
-  const CACHE_TTL = 30 * 60 * 1000; // 30 分鐘
+  const CACHE_KEY = "cwa_town_forecast_cache_v2";
+  const CACHE_TTL = 15 * 60 * 1000; // 15 分鐘
   const DEFAULT_TID = "6300200"; // 臺北市內湖區
 
   const el = {
@@ -226,7 +226,6 @@
   let rawData = null;
   let allLocations = [];
   let locationsByCounty = new Map();
-  let selectedCounty = "";
   let selectedTownGeocode = DEFAULT_TID;
 
   const normalize = (s) => String(s ?? "")
@@ -244,19 +243,6 @@
     if (v === null || v === undefined || v === "") return "—";
     const n = Number(v);
     return Number.isFinite(n) ? `${Math.round(n)}%` : `${String(v)}%`;
-  };
-
-  const fmtTime = (iso) => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return String(iso);
-    return d.toLocaleString('zh-TW', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      weekday: 'short'
-    }).replace(/年|月/g, '/').replace('日', '');
   };
 
   const fmtDate = (iso) => {
@@ -286,8 +272,8 @@
     el.errorBox.textContent = '';
   }
 
-  function setLoading(isLoading) {
-    el.sourceBadge.textContent = isLoading ? '載入中…' : '資料就緒';
+  function setLoading(isLoading, note = '') {
+    el.sourceBadge.textContent = isLoading ? (note || '載入中…') : '資料就緒';
     el.refreshBtn.disabled = isLoading;
     el.countySelect.disabled = isLoading || !rawData;
     el.townSelect.disabled = isLoading || !rawData;
@@ -386,15 +372,10 @@
       if (!locationsByCounty.has(county)) locationsByCounty.set(county, []);
       locationsByCounty.get(county).push(item);
     }
-    // 將鄉鎮依照原始資料順序保留；若含台/臺差異，查找時用 normalize 即可。
   }
 
   function resolveByGeocode(geocode) {
     return allLocations.find(x => x.geocode === String(geocode)) || null;
-  }
-
-  function resolveCountyFromTown(townItem) {
-    return townItem?.countyName || '';
   }
 
   function populateCountySelect(defaultCountyName) {
@@ -402,7 +383,6 @@
     el.countySelect.innerHTML = counties.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
     const target = counties.find(c => normalize(c) === normalize(defaultCountyName)) || counties[0] || '';
     el.countySelect.value = target;
-    selectedCounty = target;
   }
 
   function populateTownSelect(countyName, selectedGeocode) {
@@ -425,7 +405,7 @@
   function groupByDate(periods) {
     const groups = new Map();
     for (const p of periods) {
-      const start = pick(p, ['startTime', 'DataTime', 'dataTime', 'time']);
+      const start = p.startTime;
       const key = start ? new Date(start).toISOString().slice(0,10) : 'unknown';
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(p);
@@ -436,16 +416,12 @@
   function getPeriodsFromElement(element) {
     const arr = getTimeArray(element);
     return arr.map(t => ({
-      startTime: pick(t, ['startTime', 'DataTime', 'dataTime', 'start']) || pick(t, ['dataTime']) || '',
+      startTime: pick(t, ['startTime', 'DataTime', 'dataTime', 'time']) || '',
       endTime: pick(t, ['endTime', 'EndTime', 'end']) || '',
       value: getElementValue(t, ['value']),
       weather: getElementValue(t, ['weather', 'weatherDescription', 'value']),
       raw: t
     }));
-  }
-
-  function findLocationData(geocode) {
-    return resolveByGeocode(geocode);
   }
 
   function extractForecastModel(location) {
@@ -561,9 +537,7 @@
   }
 
   function updateSummary(location, model) {
-    const county = location.countyName;
-    const town = location.townName;
-    const place = `${county}${town}`;
+    const place = `${location.countyName}${location.townName}`;
     const currentSlot = mergeSlotMap(
       model.temp72.slice(0,1),
       model.pop72.slice(0,1),
@@ -581,74 +555,96 @@
     el.weekMin.textContent = firstWeekMin != null ? fmtTemp(firstWeekMin) : '—';
   }
 
-  function updateStatus(location) {
+  function updateStatus(location, transportLabel) {
     el.statusLine.innerHTML = `
       <span>目前地區：<strong>${escapeHtml(location.countyName)}${escapeHtml(location.townName)}</strong></span>
       <span>•</span>
       <span>TID：<strong>${escapeHtml(location.geocode)}</strong></span>
+      <span>•</span>
+      <span>連線：<strong>${escapeHtml(transportLabel)}</strong></span>
     `;
   }
 
-  async function fetchForecastData() {
-    const cached = cacheLoad();
-    if (cached) return cached;
-
-    const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/${DATASET_ID}?Authorization=${encodeURIComponent(API_KEY)}&format=JSON`;
-    const resp = await fetch(url, { method: 'GET' });
-    if (!resp.ok) {
-      throw new Error(`資料載入失敗（HTTP ${resp.status}）`);
-    }
-    const data = await resp.json();
-    cacheSave(data);
-    return data;
+  function stripJsonp(text) {
+    const trimmed = String(text || '').trim();
+    const m = trimmed.match(/^[^(]+\((.*)\)\s*;?\s*$/s);
+    return m ? m[1] : trimmed;
   }
 
-  function getRawRecords(data) {
-    return pick(data, ['records']) || {};
+  async function fetchJsonDirect(url) {
+    const resp = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'omit',
+      mode: 'cors'
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.json();
+  }
+
+  async function fetchJsonViaProxy(url) {
+    const proxies = [
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      `https://corsproxy.io/?${encodeURIComponent(url)}`
+    ];
+
+    let lastErr = null;
+    for (const proxyUrl of proxies) {
+      try {
+        const resp = await fetch(proxyUrl, { method: 'GET', cache: 'no-store', credentials: 'omit', mode: 'cors' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const text = await resp.text();
+        return JSON.parse(stripJsonp(text));
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error('Proxy failed');
+  }
+
+  async function fetchForecastData() {
+    const directUrl = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/${DATASET_ID}?Authorization=${encodeURIComponent(API_KEY)}&format=JSON`;
+    const tried = [];
+
+    try {
+      tried.push('直連中央氣象署');
+      return await fetchJsonDirect(directUrl);
+    } catch (directErr) {
+      console.warn('Direct fetch failed, fallback to proxy:', directErr);
+      tried.push('代理中繼');
+      try {
+        return await fetchJsonViaProxy(directUrl);
+      } catch (proxyErr) {
+        console.error('Proxy fetch failed:', proxyErr);
+        throw new Error(`直連失敗，代理也失敗。可能是 CORS、網路或 API 金鑰問題。`);
+      }
+    }
   }
 
   function getFirstCountyName() {
     return Array.from(locationsByCounty.keys())[0] || '';
   }
 
-  function selectCountyByName(countyName) {
-    const county = Array.from(locationsByCounty.keys()).find(c => normalize(c) === normalize(countyName)) || getFirstCountyName();
-    if (!county) return;
-    selectedCounty = county;
-    el.countySelect.value = county;
-    populateTownSelect(county, selectedTownGeocode);
-  }
-
-  function selectTownByGeocode(geocode) {
-    const town = resolveByGeocode(geocode);
-    if (!town) return;
-    selectedCounty = town.countyName;
-    selectedTownGeocode = town.geocode;
-    el.countySelect.value = town.countyName;
-    populateTownSelect(town.countyName, town.geocode);
-    renderForTown(town.geocode);
-  }
-
   function renderForTown(geocode) {
-    const loc = findLocationData(geocode);
+    const loc = resolveByGeocode(geocode);
     if (!loc) {
       showError('找不到該地區的預報資料。');
       return;
     }
     const model = extractForecastModel(loc.raw);
     updateSummary(loc, model);
-    updateStatus(loc);
     render72h(model);
     renderWeek(model);
     const updated = new Date();
     el.updatedAt.textContent = updated.toLocaleString('zh-TW', { dateStyle: 'medium', timeStyle: 'short' });
-    el.sourceBadge.textContent = '中央氣象署';
+    clearError();
+    updateStatus(loc, rawData?.__transportLabel || '直連/代理');
+    el.sourceBadge.textContent = rawData?.__transportLabel || '中央氣象署';
   }
 
   function attachEvents() {
     el.countySelect.addEventListener('change', () => {
       const county = el.countySelect.value;
-      selectedCounty = county;
       const towns = locationsByCounty.get(county) || [];
       const target = towns.find(t => t.geocode === selectedTownGeocode) || towns[0];
       if (target) {
@@ -666,7 +662,9 @@
     });
 
     el.refreshBtn.addEventListener('click', async () => {
-      localStorage.removeItem(CACHE_KEY);
+      try {
+        localStorage.removeItem(CACHE_KEY);
+      } catch {}
       await boot(true);
     });
   }
@@ -674,16 +672,19 @@
   async function boot(force = false) {
     try {
       clearError();
-      setLoading(true);
-
-      if (force) {
-        // nothing else
-      }
+      setLoading(true, '載入中…');
 
       if (!rawData || force) {
-        const data = await fetchForecastData();
+        const cached = force ? null : cacheLoad();
+        let data = cached;
+        let transport = '';
+        if (!data) {
+          data = await fetchForecastData();
+          transport = data ? (data.__transportLabel || '') : '';
+        }
         rawData = data;
-        allLocations = extractAllLocations(data);
+        if (rawData && !rawData.__transportLabel) rawData.__transportLabel = transport || '中央氣象署';
+        allLocations = extractAllLocations(rawData);
         buildIndexes();
       }
 
@@ -698,10 +699,10 @@
 
       const town = resolveByGeocode(el.townSelect.value) || defaultTown;
       renderForTown(town.geocode);
-      setLoading(false);
+      setLoading(false, rawData?.__transportLabel || '資料就緒');
     } catch (err) {
       console.error(err);
-      setLoading(false);
+      setLoading(false, '載入失敗');
       showError(`無法載入中央氣象署資料：${err.message || err}`);
       el.sourceBadge.textContent = '載入失敗';
     }
