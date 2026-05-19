@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>台灣鄉鎮天氣預報</title>
+  <style>
+    :root{
+      color-scheme: dark;
+      --bg:#0b0f14;
+      --panel:#121821;
+      --panel-2:#171f2b;
+      --line:#253041;
+      --text:#e8eef7;
+      --muted:#9fb0c3;
+      --accent:#7dd3fc;
+      --accent-2:#38bdf8;
+      --good:#86efac;
+      --warn:#fbbf24;
+      --bad:#fb7185;
+      --shadow: 0 12px 30px rgba(0,0,0,.28);
+      --radius: 18px;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:linear-gradient(180deg,#091019 0%,#0b0f14 30%,#0b0f14 100%);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif}
+    body{min-height:100vh}
+    a{color:inherit}
+    .wrap{max-width:980px;margin:0 auto;padding:16px 14px 28px}
+    .hero{display:flex;flex-direction:column;gap:10px;padding:16px 16px 14px;background:rgba(18,24,33,.92);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow);backdrop-filter:blur(8px)}
+    .title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+    h1{margin:0;font-size:clamp(1.25rem,4vw,1.7rem);line-height:1.2;letter-spacing:.02em}
+    .subtitle{margin:2px 0 0;color:var(--muted);font-size:.92rem;line-height:1.45}
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(125,211,252,.12);color:var(--accent);font-size:.82rem;white-space:nowrap;border:1px solid rgba(125,211,252,.24)}
+    .controls{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;margin-top:4px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    .label{font-size:.8rem;color:var(--muted)}
+    select,button{
+      appearance:none;border:1px solid var(--line);background:var(--panel-2);color:var(--text);
+      border-radius:14px;padding:12px 12px;font-size:1rem;line-height:1.2;outline:none;
+    }
+    select:focus,button:focus{border-color:rgba(125,211,252,.65);box-shadow:0 0 0 3px rgba(125,211,252,.12)}
+    button{cursor:pointer;font-weight:600;min-width:86px}
+    button:hover{border-color:#3a4c66}
+    .status{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;color:var(--muted);font-size:.88rem}
+    .status strong{color:var(--text)}
+    .error{margin-top:12px;padding:12px 14px;border-radius:16px;background:rgba(251,113,133,.08);border:1px solid rgba(251,113,133,.25);color:#fecdd3;display:none}
+    .section{margin-top:16px}
+    .section h2{margin:0 0 10px;font-size:1.02rem}
+    .section-sub{margin:-6px 0 12px;color:var(--muted);font-size:.86rem}
+    .grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .grid-7{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px}
+    .card{
+      background:linear-gradient(180deg,rgba(23,31,43,.98),rgba(18,24,33,.98));
+      border:1px solid var(--line);border-radius:20px;padding:14px;box-shadow:var(--shadow);
+    }
+    .daycard{min-height:100%}
+    .dayhead{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px}
+    .daytitle{font-weight:700;font-size:1rem}
+    .daymeta{color:var(--muted);font-size:.82rem;margin-top:2px}
+    .slot-list{display:grid;gap:8px}
+    .slot{
+      display:grid;grid-template-columns:52px 1fr auto;gap:10px;align-items:center;
+      padding:9px 10px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05)
+    }
+    .slot-time{font-weight:700;font-size:.9rem;color:#dbeafe}
+    .slot-weather{font-size:.88rem;color:var(--text);line-height:1.25}
+    .slot-right{text-align:right;white-space:nowrap}
+    .temp{font-weight:800;font-size:1rem}
+    .pop{font-size:.84rem;color:var(--muted)}
+    .summary{
+      display:grid;grid-template-columns:1.2fr .8fr;gap:12px;align-items:stretch
+    }
+    .summary-main h3{margin:0;font-size:1.2rem}
+    .summary-main .big{font-size:2.1rem;font-weight:900;line-height:1;margin:10px 0 6px}
+    .summary-main .desc{font-size:1rem;color:var(--muted);line-height:1.45}
+    .mini-kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .kpi{padding:12px 12px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05)}
+    .kpi .k{font-size:.8rem;color:var(--muted)}
+    .kpi .v{margin-top:4px;font-size:1.05rem;font-weight:800}
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(56,189,248,.1);color:#bae6fd;border:1px solid rgba(56,189,248,.18);font-size:.82rem}
+    .weekcard .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
+    .weekcard .dow{font-size:1rem;font-weight:800}
+    .weekcard .date{font-size:.82rem;color:var(--muted);margin-top:2px}
+    .weekcard .range{font-size:1.25rem;font-weight:900}
+    .weekcard .meta{margin-top:8px;color:var(--muted);font-size:.88rem;line-height:1.35}
+    .footer-note{margin-top:14px;color:var(--muted);font-size:.82rem;line-height:1.45}
+    .loading{padding:16px;border-radius:16px;background:rgba(255,255,255,.03);border:1px dashed rgba(255,255,255,.08);color:var(--muted)}
+    .skeleton{
+      display:inline-block;width:1em;height:1em;border-radius:999px;border:2px solid rgba(125,211,252,.35);
+      border-top-color:var(--accent);animation:spin 1s linear infinite;vertical-align:-2px;margin-right:8px
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @media (max-width: 860px){
+      .controls,.summary,.grid-3,.grid-7{grid-template-columns:1fr}
+      .wrap{padding:12px}
+      .hero,.card{border-radius:18px}
+      .slot{grid-template-columns:48px 1fr auto}
+      .weekcard .range{font-size:1.15rem}
+    }
+    @media (max-width: 520px){
+      .slot{grid-template-columns:44px 1fr;grid-template-areas:"time weather" "time right";align-items:start}
+      .slot-time{grid-area:time}
+      .slot-weather{grid-area:weather}
+      .slot-right{grid-area:right;text-align:left}
+      .summary-main .big{font-size:1.9rem}
+      .badge{font-size:.76rem}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="title">
+        <div>
+          <h1>台灣鄉鎮天氣預報</h1>
+          <p class="subtitle">單一頁面、手機優先、深色模式。資料來源：中央氣象署鄉鎮預報。</p>
+        </div>
+        <div class="badge" id="sourceBadge">資料載入中</div>
+      </div>
+
+      <div class="controls">
+        <div class="field">
+          <div class="label">縣市</div>
+          <select id="countySelect" disabled>
+            <option>載入中…</option>
+          </select>
+        </div>
+        <div class="field">
+          <div class="label">鄉鎮 / 區</div>
+          <select id="townSelect" disabled>
+            <option>載入中…</option>
+          </select>
+        </div>
+        <div class="field" style="justify-content:end">
+          <div class="label" aria-hidden="true">　</div>
+          <button id="refreshBtn" type="button">重新整理</button>
+        </div>
+      </div>
+
+      <div class="status" id="statusLine">
+        <span>預設地區：<strong>臺北市內湖區</strong></span>
+        <span>•</span>
+        <span>自動更新以最新 API 回應為準</span>
+      </div>
+
+      <div class="error" id="errorBox"></div>
+    </section>
+
+    <section class="section">
+      <h2>現在選擇的地區</h2>
+      <div class="summary">
+        <div class="card summary-main">
+          <div class="chip" id="placeChip">—</div>
+          <h3 id="currentPlace">—</h3>
+          <div class="big" id="currentTemp">—</div>
+          <div class="desc" id="currentDesc">正在取得資料…</div>
+        </div>
+        <div class="card">
+          <div class="mini-kpis">
+            <div class="kpi">
+              <div class="k">更新時間</div>
+              <div class="v" id="updatedAt">—</div>
+            </div>
+            <div class="kpi">
+              <div class="k">最新 3 小時降雨機率</div>
+              <div class="v" id="currentPop">—</div>
+            </div>
+            <div class="kpi">
+              <div class="k">一週最高溫</div>
+              <div class="v" id="weekMax">—</div>
+            </div>
+            <div class="kpi">
+              <div class="k">一週最低溫</div>
+              <div class="v" id="weekMin">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>72 小時預報</h2>
+      <div class="section-sub">以 3 小時為單位，顯示溫度、降雨機率與天氣狀況。</div>
+      <div class="grid-3" id="th72"></div>
+    </section>
+
+    <section class="section">
+      <h2>一週天氣預測</h2>
+      <div class="section-sub">顯示最高溫、最低溫、天氣狀況與降雨機率。</div>
+      <div class="grid-7" id="week7"></div>
+    </section>
+
+    <div class="footer-note">
+      資料來源為中央氣象署開放資料平台與鄉鎮預報資料集。此頁可直接部署在 GitHub Pages；請將檔名設為 <strong>index.html</strong>。
+    </div>
+  </div>
+
+<script>
+(() => {
+  const API_KEY = "CWA-21A787E7-10AF-4D8D-9BE1-9C27B24D20A2";
+  const DATASET_ID = "F-D0047-093";
+  const CACHE_KEY = "cwa_town_forecast_cache_v1";
+  const CACHE_TTL = 30 * 60 * 1000; // 30 分鐘
+  const DEFAULT_TID = "6300200"; // 臺北市內湖區
+
+  const el = {
+    countySelect: document.getElementById('countySelect'),
+    townSelect: document.getElementById('townSelect'),
+    refreshBtn: document.getElementById('refreshBtn'),
+    sourceBadge: document.getElementById('sourceBadge'),
+    statusLine: document.getElementById('statusLine'),
+    errorBox: document.getElementById('errorBox'),
+    placeChip: document.getElementById('placeChip'),
+    currentPlace: document.getElementById('currentPlace'),
+    currentTemp: document.getElementById('currentTemp'),
+    currentDesc: document.getElementById('currentDesc'),
+    updatedAt: document.getElementById('updatedAt'),
+    currentPop: document.getElementById('currentPop'),
+    weekMax: document.getElementById('weekMax'),
+    weekMin: document.getElementById('weekMin'),
+    th72: document.getElementById('th72'),
+    week7: document.getElementById('week7'),
+  };
+
+  let rawData = null;
+  let allLocations = [];
+  let locationsByCounty = new Map();
+  let selectedCounty = "";
+  let selectedTownGeocode = DEFAULT_TID;
+
+  const normalize = (s) => String(s ?? "")
+    .replaceAll("台", "臺")
+    .replace(/\s+/g, "")
+    .trim();
+
+  const fmtTemp = (v) => {
+    if (v === null || v === undefined || v === "") return "—";
+    const n = Number(v);
+    return Number.isFinite(n) ? `${Math.round(n)}°C` : `${String(v)}°C`;
+  };
+
+  const fmtPop = (v) => {
+    if (v === null || v === undefined || v === "") return "—";
+    const n = Number(v);
+    return Number.isFinite(n) ? `${Math.round(n)}%` : `${String(v)}%`;
+  };
+
+  const fmtTime = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso);
+    return d.toLocaleString('zh-TW', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      weekday: 'short'
+    }).replace(/年|月/g, '/').replace('日', '');
+  };
+
+  const fmtDate = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso);
+    return d.toLocaleDateString('zh-TW', {
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'short'
+    });
+  };
+
+  const dayShort = (iso) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString('zh-TW', { weekday: 'short' });
+  };
+
+  function showError(msg) {
+    el.errorBox.textContent = msg;
+    el.errorBox.style.display = 'block';
+  }
+
+  function clearError() {
+    el.errorBox.style.display = 'none';
+    el.errorBox.textContent = '';
+  }
+
+  function setLoading(isLoading) {
+    el.sourceBadge.textContent = isLoading ? '載入中…' : '資料就緒';
+    el.refreshBtn.disabled = isLoading;
+    el.countySelect.disabled = isLoading || !rawData;
+    el.townSelect.disabled = isLoading || !rawData;
+  }
+
+  function cacheLoad() {
+    try {
+      const s = localStorage.getItem(CACHE_KEY);
+      if (!s) return null;
+      const obj = JSON.parse(s);
+      if (!obj || !obj.ts || !obj.data) return null;
+      if (Date.now() - obj.ts > CACHE_TTL) return null;
+      return obj.data;
+    } catch {
+      return null;
+    }
+  }
+
+  function cacheSave(data) {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+    } catch {}
+  }
+
+  function pick(obj, keys) {
+    if (!obj) return undefined;
+    for (const k of keys) {
+      if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+      const lower = k.charAt(0).toLowerCase() + k.slice(1);
+      if (obj[lower] !== undefined && obj[lower] !== null) return obj[lower];
+      const upper = k.charAt(0).toUpperCase() + k.slice(1);
+      if (obj[upper] !== undefined && obj[upper] !== null) return obj[upper];
+    }
+    return undefined;
+  }
+
+  function getTimeArray(element) {
+    return pick(element, ['time']) || [];
+  }
+
+  function getElementValue(timeObj, fallbackKeys = ['value']) {
+    const ev = pick(timeObj, ['elementValue']) || [];
+    if (Array.isArray(ev) && ev.length) {
+      const item = ev[0];
+      const v = pick(item, fallbackKeys) ?? pick(item, ['value']) ?? pick(item, ['weather']) ?? pick(item, ['weatherDescription']);
+      return v;
+    }
+    return pick(timeObj, fallbackKeys) ?? pick(timeObj, ['value']) ?? pick(timeObj, ['weather']) ?? pick(timeObj, ['weatherDescription']);
+  }
+
+  function getWeatherElement(location, nameCandidates) {
+    const arr = pick(location, ['weatherElement']) || [];
+    if (!Array.isArray(arr)) return null;
+    const candidates = Array.isArray(nameCandidates) ? nameCandidates : [nameCandidates];
+    return arr.find(e => {
+      const n = normalize(pick(e, ['elementName']));
+      return candidates.some(c => n === normalize(c));
+    }) || null;
+  }
+
+  function getLocationName(location) {
+    return pick(location, ['locationName', 'name']) || '';
+  }
+
+  function getGeocode(location) {
+    return String(pick(location, ['geocode', 'locationId', 'tid', 'id']) || '');
+  }
+
+  function getCountyName(group) {
+    return pick(group, ['locationsName', 'locationName', 'countyName']) || '';
+  }
+
+  function extractAllLocations(data) {
+    const records = pick(data, ['records']) || {};
+    const groups = pick(records, ['locations']) || [];
+    const list = [];
+    for (const group of groups) {
+      const countyName = getCountyName(group);
+      const towns = pick(group, ['location']) || [];
+      for (const town of towns) {
+        list.push({
+          countyName,
+          townName: getLocationName(town),
+          geocode: getGeocode(town),
+          raw: town
+        });
+      }
+    }
+    return list.filter(x => x.countyName && x.townName && x.geocode);
+  }
+
+  function buildIndexes() {
+    locationsByCounty = new Map();
+    for (const item of allLocations) {
+      const county = item.countyName;
+      if (!locationsByCounty.has(county)) locationsByCounty.set(county, []);
+      locationsByCounty.get(county).push(item);
+    }
+    // 將鄉鎮依照原始資料順序保留；若含台/臺差異，查找時用 normalize 即可。
+  }
+
+  function resolveByGeocode(geocode) {
+    return allLocations.find(x => x.geocode === String(geocode)) || null;
+  }
+
+  function resolveCountyFromTown(townItem) {
+    return townItem?.countyName || '';
+  }
+
+  function populateCountySelect(defaultCountyName) {
+    const counties = Array.from(locationsByCounty.keys());
+    el.countySelect.innerHTML = counties.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    const target = counties.find(c => normalize(c) === normalize(defaultCountyName)) || counties[0] || '';
+    el.countySelect.value = target;
+    selectedCounty = target;
+  }
+
+  function populateTownSelect(countyName, selectedGeocode) {
+    const towns = locationsByCounty.get(countyName) || [];
+    el.townSelect.innerHTML = towns.map(t => `<option value="${escapeHtml(t.geocode)}">${escapeHtml(t.townName)}</option>`).join('');
+    const found = towns.find(t => t.geocode === selectedGeocode) || towns[0] || null;
+    if (found) el.townSelect.value = found.geocode;
+    selectedTownGeocode = found ? found.geocode : selectedGeocode;
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function groupByDate(periods) {
+    const groups = new Map();
+    for (const p of periods) {
+      const start = pick(p, ['startTime', 'DataTime', 'dataTime', 'time']);
+      const key = start ? new Date(start).toISOString().slice(0,10) : 'unknown';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(p);
+    }
+    return Array.from(groups.entries()).map(([key, items]) => ({ dateKey: key, items }));
+  }
+
+  function getPeriodsFromElement(element) {
+    const arr = getTimeArray(element);
+    return arr.map(t => ({
+      startTime: pick(t, ['startTime', 'DataTime', 'dataTime', 'start']) || pick(t, ['dataTime']) || '',
+      endTime: pick(t, ['endTime', 'EndTime', 'end']) || '',
+      value: getElementValue(t, ['value']),
+      weather: getElementValue(t, ['weather', 'weatherDescription', 'value']),
+      raw: t
+    }));
+  }
+
+  function findLocationData(geocode) {
+    return resolveByGeocode(geocode);
+  }
+
+  function extractForecastModel(location) {
+    const tEl = getWeatherElement(location, ['T', 'Temperature']);
+    const popEl = getWeatherElement(location, ['PoP', 'PoP12h', 'PoP24h', 'ProbabilityOfPrecipitation']);
+    const wxEl = getWeatherElement(location, ['Wx', 'Weather']);
+    const maxEl = getWeatherElement(location, ['MaxT', 'MaxTemperature']);
+    const minEl = getWeatherElement(location, ['MinT', 'MinTemperature']);
+
+    return {
+      temp72: tEl ? getPeriodsFromElement(tEl) : [],
+      pop72: popEl ? getPeriodsFromElement(popEl) : [],
+      wx72: wxEl ? getPeriodsFromElement(wxEl) : [],
+      weekMax: maxEl ? getPeriodsFromElement(maxEl) : [],
+      weekMin: minEl ? getPeriodsFromElement(minEl) : [],
+      weekPop: popEl ? getPeriodsFromElement(popEl) : [],
+      weekWx: wxEl ? getPeriodsFromElement(wxEl) : [],
+    };
+  }
+
+  function mergeSlotMap(tempArr, popArr, wxArr) {
+    const map = new Map();
+    for (const p of tempArr) map.set(p.startTime, { startTime: p.startTime, temp: p.value, pop: null, wx: null });
+    for (const p of popArr) {
+      const slot = map.get(p.startTime) || { startTime: p.startTime, temp: null, pop: null, wx: null };
+      slot.pop = p.value;
+      map.set(p.startTime, slot);
+    }
+    for (const p of wxArr) {
+      const slot = map.get(p.startTime) || { startTime: p.startTime, temp: null, pop: null, wx: null };
+      slot.wx = p.weather || p.value;
+      map.set(p.startTime, slot);
+    }
+    return Array.from(map.values()).sort((a,b) => new Date(a.startTime) - new Date(b.startTime));
+  }
+
+  function render72h(model) {
+    const tempSlots = model.temp72.slice(0, 24);
+    const popSlots = model.pop72.slice(0, 24);
+    const wxSlots = model.wx72.slice(0, 24);
+    const merged = mergeSlotMap(tempSlots, popSlots, wxSlots);
+
+    const groups = groupByDate(merged).slice(0, 3);
+    el.th72.innerHTML = groups.map(g => {
+      const dateLabel = fmtDate(g.items[0]?.startTime || g.dateKey);
+      const list = g.items.map(item => {
+        const timeLabel = item.startTime ? new Date(item.startTime).toLocaleTimeString('zh-TW', { hour:'2-digit', minute:'2-digit', hour12:false }) : '—';
+        return `
+          <div class="slot">
+            <div class="slot-time">${escapeHtml(timeLabel)}</div>
+            <div class="slot-weather">${escapeHtml(item.wx || '—')}</div>
+            <div class="slot-right">
+              <div class="temp">${escapeHtml(fmtTemp(item.temp))}</div>
+              <div class="pop">${escapeHtml(fmtPop(item.pop))}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      return `
+        <article class="card daycard">
+          <div class="dayhead">
+            <div>
+              <div class="daytitle">${escapeHtml(dateLabel)}</div>
+              <div class="daymeta">3 小時分段預報</div>
+            </div>
+          </div>
+          <div class="slot-list">${list || '<div class="loading">尚無資料</div>'}</div>
+        </article>
+      `;
+    }).join('');
+  }
+
+  function renderWeek(model) {
+    const weekMax = model.weekMax;
+    const weekMin = model.weekMin;
+    const weekWx = model.weekWx;
+    const weekPop = model.weekPop;
+
+    const count = Math.max(weekMax.length, weekMin.length, weekWx.length, weekPop.length, 7);
+    const items = [];
+    for (let i = 0; i < count; i++) {
+      const source = weekMax[i] || weekMin[i] || weekWx[i] || weekPop[i];
+      if (!source) continue;
+      items.push({
+        startTime: source.startTime,
+        endTime: source.endTime,
+        max: weekMax[i]?.value ?? null,
+        min: weekMin[i]?.value ?? null,
+        wx: weekWx[i]?.weather || weekWx[i]?.value || null,
+        pop: weekPop[i]?.value ?? null
+      });
+    }
+
+    el.week7.innerHTML = items.slice(0,7).map((item, idx) => {
+      const dow = item.startTime ? dayShort(item.startTime) : `第 ${idx + 1} 天`;
+      const date = item.startTime ? fmtDate(item.startTime) : '';
+      const range = `${fmtTemp(item.max)} / ${fmtTemp(item.min)}`;
+      const pop = item.pop != null ? fmtPop(item.pop) : '—';
+      return `
+        <article class="card weekcard">
+          <div class="top">
+            <div>
+              <div class="dow">${escapeHtml(dow)}</div>
+              <div class="date">${escapeHtml(date)}</div>
+            </div>
+            <div class="range">${escapeHtml(range)}</div>
+          </div>
+          <div class="meta">${escapeHtml(item.wx || '—')}</div>
+          <div class="meta">降雨機率：${escapeHtml(pop)}</div>
+        </article>
+      `;
+    }).join('');
+  }
+
+  function updateSummary(location, model) {
+    const county = location.countyName;
+    const town = location.townName;
+    const place = `${county}${town}`;
+    const currentSlot = mergeSlotMap(
+      model.temp72.slice(0,1),
+      model.pop72.slice(0,1),
+      model.wx72.slice(0,1)
+    )[0] || {};
+    const firstWeekMax = model.weekMax[0]?.value;
+    const firstWeekMin = model.weekMin[0]?.value;
+
+    el.placeChip.textContent = place;
+    el.currentPlace.textContent = place;
+    el.currentTemp.textContent = currentSlot.temp != null ? fmtTemp(currentSlot.temp) : '—';
+    el.currentDesc.textContent = currentSlot.wx ? `${currentSlot.wx}；${currentSlot.pop != null ? `降雨機率 ${fmtPop(currentSlot.pop)}` : ''}` : '尚無天氣描述';
+    el.currentPop.textContent = currentSlot.pop != null ? fmtPop(currentSlot.pop) : '—';
+    el.weekMax.textContent = firstWeekMax != null ? fmtTemp(firstWeekMax) : '—';
+    el.weekMin.textContent = firstWeekMin != null ? fmtTemp(firstWeekMin) : '—';
+  }
+
+  function updateStatus(location) {
+    el.statusLine.innerHTML = `
+      <span>目前地區：<strong>${escapeHtml(location.countyName)}${escapeHtml(location.townName)}</strong></span>
+      <span>•</span>
+      <span>TID：<strong>${escapeHtml(location.geocode)}</strong></span>
+    `;
+  }
+
+  async function fetchForecastData() {
+    const cached = cacheLoad();
+    if (cached) return cached;
+
+    const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/${DATASET_ID}?Authorization=${encodeURIComponent(API_KEY)}&format=JSON`;
+    const resp = await fetch(url, { method: 'GET' });
+    if (!resp.ok) {
+      throw new Error(`資料載入失敗（HTTP ${resp.status}）`);
+    }
+    const data = await resp.json();
+    cacheSave(data);
+    return data;
+  }
+
+  function getRawRecords(data) {
+    return pick(data, ['records']) || {};
+  }
+
+  function getFirstCountyName() {
+    return Array.from(locationsByCounty.keys())[0] || '';
+  }
+
+  function selectCountyByName(countyName) {
+    const county = Array.from(locationsByCounty.keys()).find(c => normalize(c) === normalize(countyName)) || getFirstCountyName();
+    if (!county) return;
+    selectedCounty = county;
+    el.countySelect.value = county;
+    populateTownSelect(county, selectedTownGeocode);
+  }
+
+  function selectTownByGeocode(geocode) {
+    const town = resolveByGeocode(geocode);
+    if (!town) return;
+    selectedCounty = town.countyName;
+    selectedTownGeocode = town.geocode;
+    el.countySelect.value = town.countyName;
+    populateTownSelect(town.countyName, town.geocode);
+    renderForTown(town.geocode);
+  }
+
+  function renderForTown(geocode) {
+    const loc = findLocationData(geocode);
+    if (!loc) {
+      showError('找不到該地區的預報資料。');
+      return;
+    }
+    const model = extractForecastModel(loc.raw);
+    updateSummary(loc, model);
+    updateStatus(loc);
+    render72h(model);
+    renderWeek(model);
+    const updated = new Date();
+    el.updatedAt.textContent = updated.toLocaleString('zh-TW', { dateStyle: 'medium', timeStyle: 'short' });
+    el.sourceBadge.textContent = '中央氣象署';
+  }
+
+  function attachEvents() {
+    el.countySelect.addEventListener('change', () => {
+      const county = el.countySelect.value;
+      selectedCounty = county;
+      const towns = locationsByCounty.get(county) || [];
+      const target = towns.find(t => t.geocode === selectedTownGeocode) || towns[0];
+      if (target) {
+        populateTownSelect(county, target.geocode);
+        renderForTown(target.geocode);
+      } else {
+        el.townSelect.innerHTML = '';
+        showError('此縣市沒有可用鄉鎮資料。');
+      }
+    });
+
+    el.townSelect.addEventListener('change', () => {
+      selectedTownGeocode = el.townSelect.value;
+      renderForTown(selectedTownGeocode);
+    });
+
+    el.refreshBtn.addEventListener('click', async () => {
+      localStorage.removeItem(CACHE_KEY);
+      await boot(true);
+    });
+  }
+
+  async function boot(force = false) {
+    try {
+      clearError();
+      setLoading(true);
+
+      if (force) {
+        // nothing else
+      }
+
+      if (!rawData || force) {
+        const data = await fetchForecastData();
+        rawData = data;
+        allLocations = extractAllLocations(data);
+        buildIndexes();
+      }
+
+      const defaultTown = resolveByGeocode(DEFAULT_TID) || allLocations.find(x => normalize(x.countyName) === normalize('臺北市') && normalize(x.townName) === normalize('內湖區')) || allLocations[0];
+      if (!defaultTown) throw new Error('無法取得鄉鎮清單。');
+
+      const defaultCounty = defaultTown.countyName;
+      const defaultGeocode = defaultTown.geocode;
+
+      populateCountySelect(defaultCounty);
+      populateTownSelect(defaultCounty, defaultGeocode);
+
+      const town = resolveByGeocode(el.townSelect.value) || defaultTown;
+      renderForTown(town.geocode);
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+      showError(`無法載入中央氣象署資料：${err.message || err}`);
+      el.sourceBadge.textContent = '載入失敗';
+    }
+  }
+
+  attachEvents();
+  boot();
+})();
+</script>
+</body>
+</html>
